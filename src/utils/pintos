@@ -66,7 +66,7 @@ sub parse_command_line {
     "debug=s" => sub { set_debug ($_[1]) },
     "no-debug" => sub { set_debug ("none") },
     "monitor" => sub { set_debug ("monitor") },
-    "gdb" => sub { set_debug ("gdb") },
+    "gdb" => sub { set_debug ("gdb"); $gdbport = $uidport; },
     "uport" => sub { $gdbport = $uidport; },
     "gdb-port=i" => \$gdbport,
 
@@ -571,7 +571,7 @@ cpu: ips=1000000
 megs: $mem
 log: bochsout.txt
 panic: action=fatal
-user_shortcut: keys=ctrlaltdel
+keyboard: user_shortcut=ctrl-alt-del
 EOF
   print BOCHSRC "gdbstub: enabled=1, port=$gdbport\n" if $debug eq 'gdb';
   print BOCHSRC "clock: sync=", $realtime ? 'realtime' : 'none',

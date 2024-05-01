@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ######################################################
-# 
-# Setup OS lab tool chain (i386-elf-* cross compiler). 
+#
+# Setup OS lab tool chain (i386-elf-* cross compiler).
 #
 # Tested on Mac OS, Ubuntu and Fedora.
 #
@@ -23,7 +23,7 @@ download_and_check()
   local fdirname="${fname%.tar.*}"
   cd $CWD/src
   if [ ! -f $fname ]; then
-    wget $1 
+    wget $1
     if [ ! -f $fname ]; then
       perror "Failed to download $1"
     fi
@@ -36,7 +36,7 @@ download_and_check()
   if [ ! -d $fdirname ]; then
     echo "Extracting $fname to $fdirname..."
     if [[ $fname == *.tar.gz ]]; then
-      tar xzf $fname 
+      tar xzf $fname
     elif [[ $fname == *.tar.bz2 ]]; then
       tar xjf $fname
     elif [[ $fname == *.tar.xz ]]; then
@@ -164,11 +164,7 @@ if [ $tool == "all" -o $tool == "gcc" ]; then
   popd
 fi
 if [ $tool == "all" -o $tool == "gdb" ]; then
-  download_and_check https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz 4607680b973d3ec92c30ad029f1b7dbde3876869e6b3a117d8a7e90081113186
-  echo "Patching GDB..."
-  pushd $CWD/src/gdb-7.12.1
-  cat $SCRIPT_DIR/gdb-7.12.1-python.patch | patch -p2
-  popd
+  download_and_check https://ftp.gnu.org/gnu/gdb/gdb-8.3.1.tar.xz 1e55b4d7cdca7b34be12f4ceae651623aa73b2fd640152313f9f66a7149757c4
 fi
 
 if [ $tool == "all" -o $tool == "binutils" ]; then
@@ -182,10 +178,10 @@ fi
 
 if [ $tool == "all" -o $tool == "gcc" ]; then
   echo "Building GCC..."
-  mkdir -p $CWD/build/gcc && cd $CWD/build/gcc 
+  mkdir -p $CWD/build/gcc && cd $CWD/build/gcc
   ../../src/gcc-6.2.0/configure CXXFLAGS="-fpermissive" --prefix=$PREFIX --target=$TARGET \
     --disable-multilib --disable-nls --disable-werror --disable-libssp \
-    --disable-libmudflap --with-newlib --without-headers --enable-languages=c || perror "Failed to configure gcc"
+    --disable-libmudflap --with-newlib --without-headers --enable-languages=c,c++ || perror "Failed to configure gcc"
   make -j8 all-gcc  || perror "Failed to make gcc"
   make install-gcc
   make all-target-libgcc || perror "Failed to libgcc"
@@ -194,8 +190,8 @@ fi
 
 if [ $tool == "all" -o $tool == "gdb" ]; then
   echo "Building gdb..."
-  mkdir -p $CWD/build/gdb && cd $CWD/build/gdb 
-  ../../src/gdb-7.12.1/configure CFLAGS="-Wno-implicit-function-declaration" --prefix=$PREFIX --target=$TARGET --disable-werror --with-python=no || perror "Failed to configure gdb"
+  mkdir -p $CWD/build/gdb && cd $CWD/build/gdb
+  ../../src/gdb-8.3.1/configure CFLAGS="-Wno-implicit-function-declaration" --prefix=$PREFIX --target=$TARGET --disable-werror || perror "Failed to configure gdb"
   make -j8 || perror "Failed to make gdb"
   make install
 fi

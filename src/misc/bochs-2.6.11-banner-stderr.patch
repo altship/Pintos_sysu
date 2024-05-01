@@ -15,8 +15,9 @@
 +    bx_center_print(stderr, buffer, 72);
      if (bx_get_timestamp(buffer) > 0) {
 -      bx_center_print(stdout, buffer, 72);
+-      printf("\n");
 +      bx_center_print(stderr, buffer, 72);
-       printf("\n");
++      fprintf(stderr, "\n");
      }
    }
 -  printf("%s\n", divider);

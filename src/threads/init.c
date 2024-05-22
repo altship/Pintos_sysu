@@ -64,6 +64,7 @@ static char **read_command_line(void);
 static char **parse_options(char **argv);
 static void run_actions(char **argv);
 static void usage(void);
+static void kshell(void);
 
 #ifdef FILESYS
 static void locate_block_devices(void);
@@ -74,6 +75,7 @@ int main(void) NO_RETURN;
 
 /* Pintos main entry point. */
 int main(void) {
+    
     char **argv;
 
     /* Clear BSS. */
@@ -130,7 +132,7 @@ int main(void) {
         /* Run actions specified on kernel command line. */
         run_actions(argv);
     } else {
-        /* TODO: no command line passed to kernel. Run interactively. */
+        kshell();
     }
 
     /* Finish up. */
@@ -398,3 +400,45 @@ static void locate_block_device(enum block_type role, const char *name) {
     }
 }
 #endif
+
+static void kshell(void) {
+    char input[257] = {0};
+    unsigned int count = 0;
+    while (1) {
+        printf("KSHELL>");
+        count = 0;
+        input[0] = '0';
+        while (1) {
+            input[count] = input_getc();
+            if (input[count] > 126 || input[count] < 32) {
+                if ((input[count] == '\b' || input[count] == 127) && count > 0) {
+                    printf("\b\033[K");
+                    count--;
+                }
+                else if (input[count] == '\r' || input[count] == '\n') {
+                    printf("\n");
+                    break;
+                }
+            } else {
+                printf("%c", input[count]);
+                count++;
+            }
+        }
+        input[count] = '\0';
+
+        if (strcmp(input, "whoami") == 0) {
+            printf("u21312551\n");
+        } 
+        else if (strcmp(input, "exit") == 0) {
+            printf("Kernel Shell Terminated...");
+            return;
+        }
+        else if (strstr(input, "echo") == input && (input[4] == '\0' || input[4] == ' ')) {
+            count = 4;
+            while(input[count] == ' ')count++;
+            printf("%s\n", input + count);
+        } else {
+            printf("invalid command.\n");
+        }
+    }
+}

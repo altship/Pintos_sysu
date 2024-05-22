@@ -401,6 +401,8 @@ static void locate_block_device(enum block_type role, const char *name) {
 }
 #endif
 
+/* Basic little shell, just provide whoami, echo, and exit. 
+   The echo act as same as the linux shell. */
 static void kshell(void) {
     char input[257] = {0};
     unsigned int count = 0;
@@ -411,8 +413,9 @@ static void kshell(void) {
         while (1) {
             input[count] = input_getc();
             if (input[count] > 126 || input[count] < 32) {
+                // code server gives backspace as ASCII:127, but local machine gives '\b'.
                 if ((input[count] == '\b' || input[count] == 127) && count > 0) {
-                    printf("\b\033[K");
+                    printf("\b\033[K"); // \033[K means clear all the char after the cursor.
                     count--;
                 }
                 else if (input[count] == '\r' || input[count] == '\n') {
@@ -435,7 +438,7 @@ static void kshell(void) {
         }
         else if (strstr(input, "echo") == input && (input[4] == '\0' || input[4] == ' ')) {
             count = 4;
-            while(input[count] == ' ')count++;
+            while(input[count] == ' ')count++; //Ignore the space.
             printf("%s\n", input + count);
         } else {
             printf("invalid command.\n");

@@ -406,16 +406,20 @@ static void locate_block_device(enum block_type role, const char *name) {
 static void kshell(void) {
     char input[257] = {0};
     unsigned int count = 0;
+
     while (1) {
         printf("KSHELL>");
         count = 0;
         input[0] = '0';
+
         while (1) {
             input[count] = input_getc();
+
+            /* code server gives backspace as ASCII:127, but local machine gives '\b'. */
             if (input[count] > 126 || input[count] < 32) {
-                // code server gives backspace as ASCII:127, but local machine gives '\b'.
                 if ((input[count] == '\b' || input[count] == 127) && count > 0) {
-                    printf("\b\033[K"); // \033[K means clear all the char after the cursor.
+                    /* \033[K means clear all the char after the cursor. */
+                    printf("\b\033[K"); 
                     count--;
                 }
                 else if (input[count] == '\r' || input[count] == '\n') {
@@ -427,13 +431,14 @@ static void kshell(void) {
                 count++;
             }
         }
+
         input[count] = '\0';
 
-        if (strcmp(input, "whoami") == 0) {
+        if (!strcmp(input, "whoami")) {
             printf("u21312551\n");
         } 
-        else if (strcmp(input, "exit") == 0) {
-            printf("Kernel Shell Terminated...");
+        else if (!strcmp(input, "exit")) {
+            printf("Kernel Shell Terminated...\n");
             return;
         }
         else if (strstr(input, "echo") == input && (input[4] == '\0' || input[4] == ' ')) {

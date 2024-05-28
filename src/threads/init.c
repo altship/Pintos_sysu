@@ -402,10 +402,13 @@ static void locate_block_device(enum block_type role, const char *name) {
 #endif
 
 /* Basic little shell, just provide whoami, echo, and exit. 
-   The echo act as same as the linux shell. */
-static void kshell(void) {
-    char input[257] = {0};
+   The echo act as same as the linux shell. build-in input overflow detection.*/
+static void kshell() {
+    const unsigned int length = 64;
+    char *input = (char*)malloc((length + 1) * sizeof(char));
     unsigned int count = 0;
+
+    ASSERT(input != NULL);
 
     while (1) {
         printf("KSHELL>");
@@ -415,17 +418,24 @@ static void kshell(void) {
         while (1) {
             input[count] = input_getc();
 
-            /* code server gives backspace as ASCII:127, but local machine gives '\b'. */
             if (input[count] > 126 || input[count] < 32) {
-                if ((input[count] == '\b' || input[count] == 127) && count > 0) {
-                    /* \033[K means clear all the char after the cursor. */
-                    printf("\b\033[K"); 
+                if ((input[count] == '\b' || input[count] == 127) 
+                    && count > 0) {
+                    printf("\b \b"); 
                     count--;
                 }
                 else if (input[count] == '\r' || input[count] == '\n') {
                     printf("\n");
                     break;
                 }
+            }
+            /* String overflow detection */
+            else if (count == length) {
+                printf("\nYou cannot type more than %d(include special) \
+characters! Check your input.\nPress Enter to continue.", length);
+                input[count] = '\0';
+                while (input_getc() != '\r') {}
+                printf("\nKSHELL>%s", input);
             } else {
                 printf("%c", input[count]);
                 count++;
@@ -439,14 +449,17 @@ static void kshell(void) {
         } 
         else if (!strcmp(input, "exit")) {
             printf("Kernel Shell Terminated...\n");
-            return;
+            break;
         }
-        else if (strstr(input, "echo") == input && (input[4] == '\0' || input[4] == ' ')) {
+        else if (strstr(input, "echo") == input 
+                && (input[4] == '\0' || input[4] == ' ')) {
             count = 4;
-            while(input[count] == ' ')count++; //Ignore the space.
+            /* White space followed by 'echo' will be omitted. */
+            while(input[count] == ' ')count++;
             printf("%s\n", input + count);
         } else {
             printf("invalid command.\n");
         }
     }
+    free(input);
 }

@@ -7,6 +7,8 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
+#include "threads/palloc.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -30,9 +32,23 @@ static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
 
+static bool cmp(const struct list_elem *, const struct list_elem *, void *);
+
+/* A list to store a threads which is in sleep. */
+static struct list sleep_list;
+static struct lock sleep_list_lock;
+struct sleep_thread {
+    int64_t approx_leave;
+    struct semaphore lk;
+    struct list_elem elem;
+};
+// static struct semaphore sleep_not_empty;
+// static struct semaphore sleep_list_edited;
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void timer_init(void) {
+    sleep_init();
     pit_configure_channel(0, 2, TIMER_FREQ);
     intr_register_ext(0x20, timer_interrupt, "8254 Timer");
 }
@@ -75,12 +91,76 @@ int64_t timer_elapsed(int64_t then) { return timer_ticks() - then; }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
-void timer_sleep(int64_t ticks) {
+void _timer_sleep(int64_t ticks) {
     int64_t start = timer_ticks();
 
     ASSERT(intr_get_level() == INTR_ON);
     while (timer_elapsed(start) < ticks)
         thread_yield();
+}
+void sleep_init(void) {
+    list_init(&sleep_list);
+    lock_init(&sleep_list_lock);
+    // sema_init(&sleep_not_empty, 0);
+    // sema_init(&sleep_list_edited, 0);
+}
+
+void timer_sleep(int64_t ticks) {
+    if (ticks <= 0)return;
+    struct sleep_thread *sl;
+    sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
+    // printf(" %" PRId64 "\n", ticks);
+    // debug_backtrace();
+
+    ASSERT(sl != NULL)
+
+    sema_init(&sl->lk, 0);
+    sl->approx_leave = timer_ticks() + ticks;
+    
+    // lock_acquire(&sleep_list_lock);
+    intr_disable();
+    list_insert_ordered(&sleep_list, &sl->elem, cmp, NULL);
+    // lock_release(&sleep_list_lock);
+    intr_enable();
+
+    // sema_up(&sleep_list_edited);
+    // sema_up(&sleep_not_empty);
+
+    sema_down(&sl->lk);
+
+    // lock_acquire(&sleep_list_lock);
+    // list_remove(&sl->elem);
+    // lock_release(&sleep_list_lock);
+
+    free(sl);
+}
+
+void timer_wake(void) {
+    if (list_empty(&sleep_list))return;
+    struct sleep_thread *sl;
+    struct list_elem *iter = list_begin(&sleep_list);
+    sl = list_entry(iter, struct sleep_thread, elem);
+    while (1) {
+        // printf("list : %" PRId64 " ", sl->approx_leave);
+        if (sl->approx_leave == timer_ticks()) {
+            printf("Call time: %" PRId64 "\n", timer_ticks());
+            debug_backtrace_all();
+            printf("\n");
+            sema_up(&sl->lk);
+            debug_backtrace_all();
+            printf("\n\n\n");
+            list_pop_front(&sleep_list);
+        } else {
+            // printf("\n");
+            break;
+        }
+        if (list_empty(&sleep_list)) {
+            // printf("\n");
+            break;
+        }
+        iter = list_begin(&sleep_list);
+        sl = list_entry(iter, struct sleep_thread, elem);
+    }
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -128,7 +208,9 @@ void timer_print_stats(void) { printf("Timer: %" PRId64 " ticks\n", timer_ticks(
 /* Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
+    barrier();
     thread_tick();
+    timer_wake();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -189,4 +271,16 @@ static void real_time_delay(int64_t num, int32_t denom) {
      the possibility of overflow. */
     ASSERT(denom % 1000 == 0);
     busy_wait(loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
+}
+
+static bool cmp(const struct list_elem *a, const struct list_elem *b, void *aux) {
+    ASSERT(aux == NULL);
+    struct sleep_thread *aa = list_entry(a, struct sleep_thread, elem);
+    struct sleep_thread *bb = list_entry(b, struct sleep_thread, elem);
+    ASSERT(aa != NULL && bb != NULL);
+    if (aa->approx_leave < bb->approx_leave) {
+        return true;
+    } else {
+        return false;
+    }
 }

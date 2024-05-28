@@ -106,22 +106,32 @@ void sleep_init(void) {
 }
 
 void timer_sleep(int64_t ticks) {
+    // printf("Now are: %" PRId64 " ticks, and required sleep is: %" PRId64 "\n", timer_ticks(), ticks);
+    int64_t start = timer_ticks();
     if (ticks <= 0)return;
     struct sleep_thread *sl;
     sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
-    // printf(" %" PRId64 "\n", ticks);
-    // debug_backtrace();
 
     ASSERT(sl != NULL)
 
     sema_init(&sl->lk, 0);
-    sl->approx_leave = timer_ticks() + ticks;
+    sl->approx_leave = start + ticks;
     
     // lock_acquire(&sleep_list_lock);
-    intr_disable();
+    enum intr_level old_level = intr_disable();
+    ASSERT(old_level == INTR_ON);
     list_insert_ordered(&sleep_list, &sl->elem, cmp, NULL);
     // lock_release(&sleep_list_lock);
-    intr_enable();
+    old_level = intr_enable();
+    ASSERT(old_level == INTR_OFF);
+
+    // struct list_elem *i;
+    // printf("List:\n");
+    // for (i = list_begin(&sleep_list); i != list_end(&sleep_list); i = list_next(i)) {
+    //     struct sleep_thread *temp = list_entry(i, struct sleep_thread, elem);
+    //     printf("The approx wake time: %" PRId64 "\n", temp->approx_leave);
+    // }
+    // printf("\n\n\n");
 
     // sema_up(&sleep_list_edited);
     // sema_up(&sleep_not_empty);
@@ -142,13 +152,8 @@ void timer_wake(void) {
     sl = list_entry(iter, struct sleep_thread, elem);
     while (1) {
         // printf("list : %" PRId64 " ", sl->approx_leave);
-        if (sl->approx_leave == timer_ticks()) {
-            printf("Call time: %" PRId64 "\n", timer_ticks());
-            debug_backtrace_all();
-            printf("\n");
+        if (sl->approx_leave <= timer_ticks()) {
             sema_up(&sl->lk);
-            debug_backtrace_all();
-            printf("\n\n\n");
             list_pop_front(&sleep_list);
         } else {
             // printf("\n");
@@ -208,8 +213,8 @@ void timer_print_stats(void) { printf("Timer: %" PRId64 " ticks\n", timer_ticks(
 /* Timer interrupt handler. */
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
-    barrier();
     thread_tick();
+    barrier();
     timer_wake();
 }
 

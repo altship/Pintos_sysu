@@ -32,18 +32,8 @@ static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
 
-static bool cmp(const struct list_elem *, const struct list_elem *, void *);
-
 /* A list to store a threads which is in sleep. */
 static struct list sleep_list;
-static struct lock sleep_list_lock;
-struct sleep_thread {
-    int64_t approx_leave;
-    struct semaphore lk;
-    struct list_elem elem;
-};
-// static struct semaphore sleep_not_empty;
-// static struct semaphore sleep_list_edited;
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -89,82 +79,45 @@ int64_t timer_ticks(void) {
    should be a value once returned by timer_ticks(). */
 int64_t timer_elapsed(int64_t then) { return timer_ticks() - then; }
 
+/* Initialize the sleep list. */
+void sleep_init(void) { list_init(&sleep_list); }
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
-void _timer_sleep(int64_t ticks) {
-    int64_t start = timer_ticks();
-
-    ASSERT(intr_get_level() == INTR_ON);
-    while (timer_elapsed(start) < ticks)
-        thread_yield();
-}
-void sleep_init(void) {
-    list_init(&sleep_list);
-    lock_init(&sleep_list_lock);
-    // sema_init(&sleep_not_empty, 0);
-    // sema_init(&sleep_list_edited, 0);
-}
-
 void timer_sleep(int64_t ticks) {
-    // printf("Now are: %" PRId64 " ticks, and required sleep is: %" PRId64 "\n", timer_ticks(), ticks);
-    int64_t start = timer_ticks();
     if (ticks <= 0)return;
+    int64_t start = timer_ticks();
     struct sleep_thread *sl;
     sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
-
-    ASSERT(sl != NULL)
-
+    ASSERT(sl != NULL);
     sema_init(&sl->lk, 0);
     sl->approx_leave = start + ticks;
-    
-    // lock_acquire(&sleep_list_lock);
+
+    /* Disabling interruption to enter critical section */
     enum intr_level old_level = intr_disable();
     ASSERT(old_level == INTR_ON);
-    list_insert_ordered(&sleep_list, &sl->elem, cmp, NULL);
-    // lock_release(&sleep_list_lock);
+    list_push_front(&sleep_list, &sl->elem);
     old_level = intr_enable();
     ASSERT(old_level == INTR_OFF);
 
-    // struct list_elem *i;
-    // printf("List:\n");
-    // for (i = list_begin(&sleep_list); i != list_end(&sleep_list); i = list_next(i)) {
-    //     struct sleep_thread *temp = list_entry(i, struct sleep_thread, elem);
-    //     printf("The approx wake time: %" PRId64 "\n", temp->approx_leave);
-    // }
-    // printf("\n\n\n");
-
-    // sema_up(&sleep_list_edited);
-    // sema_up(&sleep_not_empty);
-
     sema_down(&sl->lk);
-
-    // lock_acquire(&sleep_list_lock);
-    // list_remove(&sl->elem);
-    // lock_release(&sleep_list_lock);
 
     free(sl);
 }
 
+/* Every ticks search for threads that need to be waken, then awake it. 
+   called from timer interruption, no lock is necessary.*/
 void timer_wake(void) {
     if (list_empty(&sleep_list))return;
     struct sleep_thread *sl;
     struct list_elem *iter = list_begin(&sleep_list);
-    sl = list_entry(iter, struct sleep_thread, elem);
-    while (1) {
-        // printf("list : %" PRId64 " ", sl->approx_leave);
-        if (sl->approx_leave <= timer_ticks()) {
-            sema_up(&sl->lk);
-            list_pop_front(&sleep_list);
-        } else {
-            // printf("\n");
-            break;
-        }
-        if (list_empty(&sleep_list)) {
-            // printf("\n");
-            break;
-        }
-        iter = list_begin(&sleep_list);
+
+    for (; iter != list_end(&sleep_list); iter = list_next(iter)) {
         sl = list_entry(iter, struct sleep_thread, elem);
+        if (sl->approx_leave <= timer_ticks()) {
+            list_remove(iter);
+            sema_up(&sl->lk);
+        }
     }
 }
 
@@ -276,16 +229,4 @@ static void real_time_delay(int64_t num, int32_t denom) {
      the possibility of overflow. */
     ASSERT(denom % 1000 == 0);
     busy_wait(loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
-}
-
-static bool cmp(const struct list_elem *a, const struct list_elem *b, void *aux) {
-    ASSERT(aux == NULL);
-    struct sleep_thread *aa = list_entry(a, struct sleep_thread, elem);
-    struct sleep_thread *bb = list_entry(b, struct sleep_thread, elem);
-    ASSERT(aa != NULL && bb != NULL);
-    if (aa->approx_leave < bb->approx_leave) {
-        return true;
-    } else {
-        return false;
-    }
 }

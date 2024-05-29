@@ -32,6 +32,13 @@ static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
 
+/* A struct to store the attribute of the thread */
+struct sleep_thread {
+    int64_t approx_leave;
+    struct semaphore lk;
+    struct list_elem elem;
+};
+
 /* A list to store a threads which is in sleep. */
 static struct list sleep_list;
 

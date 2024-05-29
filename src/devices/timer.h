@@ -8,12 +8,6 @@
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
 
-/* A struct to store the attribute of the thread */
-struct sleep_thread {
-    int64_t approx_leave;
-    struct semaphore lk;
-    struct list_elem elem;
-};
 
 void timer_init(void);
 void timer_calibrate(void);

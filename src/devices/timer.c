@@ -42,6 +42,8 @@ struct sleep_thread {
 /* A list to store a threads which is in sleep. */
 static struct list sleep_list;
 
+static bool cmp(const struct list_elem*, const struct list_elem*, void*);
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void timer_init(void) {
@@ -91,42 +93,61 @@ void sleep_init(void) { list_init(&sleep_list); }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
+// void timer_sleep(int64_t ticks) {
+//     if (ticks <= 0)return;
+//     int64_t start = timer_ticks();
+//     struct sleep_thread *sl;
+//     sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
+//     ASSERT(sl != NULL);
+//     sema_init(&sl->lk, 0);
+//     sl->approx_leave = start + ticks;
+
+//     /* Disabling interruption to enter critical section */
+//     enum intr_level old_level = intr_disable();
+//     ASSERT(old_level == INTR_ON);
+//     // list_push_front(&sleep_list, &sl->elem);
+//     list_insert_ordered(&sleep_list, &sl->elem, cmp, NULL);
+//     old_level = intr_enable();
+//     ASSERT(old_level == INTR_OFF);
+
+//     sema_down(&sl->lk);
+
+//     free(sl);
+//     // thread_yield();
+// }
+
 void timer_sleep(int64_t ticks) {
     if (ticks <= 0)return;
-    int64_t start = timer_ticks();
-    struct sleep_thread *sl;
-    sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
-    ASSERT(sl != NULL);
-    sema_init(&sl->lk, 0);
-    sl->approx_leave = start + ticks;
-
-    /* Disabling interruption to enter critical section */
     enum intr_level old_level = intr_disable();
-    ASSERT(old_level == INTR_ON);
-    list_push_front(&sleep_list, &sl->elem);
-    old_level = intr_enable();
-    ASSERT(old_level == INTR_OFF);
-
-    sema_down(&sl->lk);
-
-    free(sl);
+    thread_current()->sleep = ticks;
+    thread_block();
+    intr_set_level(old_level);
 }
 
 /* Every ticks search for threads that need to be waken, then awake it. 
    called from timer interruption, no lock is necessary.*/
-void timer_wake(void) {
-    if (list_empty(&sleep_list))return;
-    struct sleep_thread *sl;
-    struct list_elem *iter = list_begin(&sleep_list);
+// void timer_wake(void) {
+//     if (list_empty(&sleep_list))return;
+//     struct sleep_thread *sl;
+//     struct list_elem *iter;
 
-    for (; iter != list_end(&sleep_list); iter = list_next(iter)) {
-        sl = list_entry(iter, struct sleep_thread, elem);
-        if (sl->approx_leave <= timer_ticks()) {
-            list_remove(iter);
-            sema_up(&sl->lk);
-        }
-    }
-}
+//     while (!list_empty(&sleep_list)) {
+//         iter = list_begin(&sleep_list);
+//         sl = list_entry(iter, struct sleep_thread, elem);
+//         if (sl->approx_leave > timer_ticks())
+//             break;
+//         list_pop_front(&sleep_list);
+//         sema_up(&sl->lk);
+//     }
+
+//     // for (; iter != list_end(&sleep_list); iter = list_next(iter)) {
+//     //     sl = list_entry(iter, struct sleep_thread, elem);
+//     //     if (sl->approx_leave <= timer_ticks()) {
+//     //         list_remove(iter);
+//     //         sema_up(&sl->lk);
+//     //     }
+//     // }
+// }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
@@ -174,8 +195,8 @@ void timer_print_stats(void) { printf("Timer: %" PRId64 " ticks\n", timer_ticks(
 static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
     thread_tick();
-    barrier();
-    timer_wake();
+    // barrier();
+    // timer_wake();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -236,4 +257,10 @@ static void real_time_delay(int64_t num, int32_t denom) {
      the possibility of overflow. */
     ASSERT(denom % 1000 == 0);
     busy_wait(loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
+}
+
+static bool cmp(const struct list_elem *a, const struct list_elem *b, void* aux) {
+    ASSERT(aux == NULL);
+    return list_entry(a, struct sleep_thread, elem)->approx_leave 
+            < list_entry(b, struct sleep_thread, elem)->approx_leave;
 }

@@ -22,36 +22,30 @@ int convert_to_int_round2near(int64_t x) {
 /* Multiple, a fixed point number multiple by a integer. */
 static int64_t __multiple(int64_t x, int y) { return x * y; }
 static int64_t multiple(int64_t x, int64_t y) {
-    return x * y / F;
+    return (int64_t)x * y / F;
 }
 
 /* Divide. */
 static int64_t __divide(int64_t x, int y) { return x / y; }
 static int64_t divide(int64_t x, int64_t y) {
-    return x * F / y;
+    return (int64_t)x * F / y;
 }
 
 /* Arithmetic operation to be called in thread.c */
 int64_t thread_get_load_avg_arith(int64_t load_avg, int ready_threads) {
-    int64_t result = 0;
-    result = __divide(__multiple(load_avg, 59) 
-                     + convert_to_fixpoint(ready_threads), 60);
-    return result;
+    return __divide((__multiple(load_avg, 59) 
+                     + convert_to_fixpoint(ready_threads)), 60);
 }
 
 /* Arithmetic operation to be called in thread.c */
 int64_t thread_get_recent_cpu_arith(int64_t load_avg, int64_t recent_cpu, int nice) {
-    int64_t result = 0;
-    result = multiple((divide(2 * load_avg, (2 * load_avg + F))), recent_cpu) 
+    return multiple((divide((2 * load_avg), (2 * load_avg + F))), recent_cpu) 
             + convert_to_fixpoint(nice);
-    return result;
 }
 
 int thread_cal_priority(int64_t recent_cpu, int nice, int PRI_MAX) {
-    int64_t result = 0;
-    result = convert_to_fixpoint(PRI_MAX) - __divide(recent_cpu, 4) 
-            - __multiple(convert_to_fixpoint(nice), 2);
-    return convert_to_int_round2near(result);
+    return convert_to_int_round2near((PRI_MAX) - __divide(recent_cpu, 4) 
+            - __multiple(convert_to_fixpoint(nice), 2));
 }
 
 // int main() {

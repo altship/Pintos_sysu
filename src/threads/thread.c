@@ -11,7 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/arithmetic.h"
+// #include "threads/arithmetic.h"
+#include "threads/arith.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -53,7 +54,7 @@ static long long user_ticks;   /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4          /* # of timer ticks to give each thread. */
 static unsigned thread_ticks; /* # of timer ticks since last yield. */
-fix_point load_avg;
+static fix_point load_avg;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -149,7 +150,9 @@ void thread_tick(void) {
         int ready_size = list_size(&ready_list);
         if (t != idle_thread) 
             ready_size++;
-        load_avg = thread_get_load_avg_arith(load_avg, ready_size);
+        // load_avg = thread_get_load_avg_arith(load_avg, ready_size);
+        load_avg = DIVID_FIX_N_INT((MULTI_FIX_N_INT(load_avg, 59) 
+                            + CONVERT_2_FIX(ready_size)), 60);
 
         ASSERT(intr_get_level() == INTR_OFF);
         thread_foreach(thread_update_recent_cpu, NULL);
@@ -352,7 +355,9 @@ void thread_update_priority(struct thread *t, void *aux) {
     ASSERT(aux == NULL);
     if (t == idle_thread)
         return;
-    int priority = thread_cal_priority(t->recent_cpu, t->nice, PRI_MAX);
+    // int priority = thread_cal_priority(t->recent_cpu, t->nice, PRI_MAX);
+    int priority = CONVERT_2_INT_ROUNDNEAR((CONVERT_2_FIX(PRI_MAX) 
+            - DIVID_FIX_N_INT(t->recent_cpu, 4) - CONVERT_2_FIX(2 * t->nice)));
     if (priority > PRI_MAX) 
         priority = PRI_MAX;
     else if (priority < PRI_MIN)
@@ -364,8 +369,10 @@ void thread_update_recent_cpu(struct thread *t, void *aux) {
     ASSERT(aux == NULL);
     if (t == idle_thread)
         return;
-    t->recent_cpu = thread_get_recent_cpu_arith(load_avg, 
-                    t->recent_cpu, t->nice);
+    // t->recent_cpu = thread_get_recent_cpu_arith(load_avg, 
+                    // t->recent_cpu, t->nice);
+    t->recent_cpu = MULTI_FIX(DIVID_FIX(MULTI_FIX_N_INT(load_avg, 2), 
+    (MULTI_FIX_N_INT(load_avg, 2) + F)), t->recent_cpu) + CONVERT_2_FIX(t->nice);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -393,12 +400,15 @@ int thread_get_nice(void) { return thread_current()->nice; }
 
 /* Returns 100 times the system load average. */
 int thread_get_load_avg(void) { 
-    return convert_to_int_round2near(100 * load_avg); 
+    // return convert_to_int_round2near(100 * load_avg); 
+    return CONVERT_2_INT_ROUNDNEAR(MULTI_FIX_N_INT(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void) { 
-    return convert_to_int_round2near(100 * thread_current()->recent_cpu); 
+    // return convert_to_int_round2near(100 * thread_current()->recent_cpu); 
+    return CONVERT_2_INT_ROUNDNEAR(MULTI_FIX_N_INT(
+                                thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

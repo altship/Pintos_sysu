@@ -33,6 +33,7 @@
 #include "threads/thread.h"
 
 static bool cmp_priority(const struct list_elem*, const struct list_elem*, void*);
+static bool cmp_priority_2(const struct list_elem*, const struct list_elem*, void*);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -65,9 +66,9 @@ void sema_down(struct semaphore *sema) {
 
     old_level = intr_disable();
     while (sema->value == 0) {
-        list_push_back(&sema->waiters, &thread_current()->elem);
-        // list_insert_ordered(&sema->waiters, &thread_current()->elem,
-        //                     cmp_priority, NULL);
+        // list_push_back(&sema->waiters, &thread_current()->elem);
+        list_insert_ordered(&sema->waiters, &thread_current()->elem,
+                            cmp_priority, NULL);
         thread_block();
     }
     sema->value--;
@@ -227,6 +228,7 @@ bool lock_held_by_current_thread(const struct lock *lock) {
 struct semaphore_elem {
     struct list_elem elem;      /* List element. */
     struct semaphore semaphore; /* This semaphore. */
+    int priority;
 };
 
 /* Initializes condition variable COND.  A condition variable
@@ -267,7 +269,9 @@ void cond_wait(struct condition *cond, struct lock *lock) {
     ASSERT(lock_held_by_current_thread(lock));
 
     sema_init(&waiter.semaphore, 0);
-    list_push_back(&cond->waiters, &waiter.elem);
+    waiter.priority = thread_current()->priority;
+    // list_push_back(&cond->waiters, &waiter.elem);
+    list_insert_ordered(&cond->waiters, &waiter.elem, cmp_priority_2, NULL);
     lock_release(lock);
     sema_down(&waiter.semaphore);
     lock_acquire(lock);
@@ -311,5 +315,13 @@ static bool cmp_priority(const struct list_elem *a, const struct list_elem *b,
     ASSERT(intr_get_level() == INTR_OFF);
     struct thread *aa = list_entry(a, struct thread, elem);
     struct thread *bb = list_entry(b, struct thread, elem);
+    return aa->priority > bb->priority;
+}
+
+static bool cmp_priority_2(const struct list_elem *a, const struct list_elem *b,
+                            void *aux) {
+    ASSERT(aux == NULL);
+    struct semaphore_elem *aa = list_entry(a, struct semaphore_elem, elem);
+    struct semaphore_elem *bb = list_entry(b, struct semaphore_elem, elem);
     return aa->priority > bb->priority;
 }

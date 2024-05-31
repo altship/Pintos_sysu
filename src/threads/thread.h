@@ -88,7 +88,7 @@ struct thread {
     int sleep;
     int priority;              /* Priority. */
     int nice;                  /* Nice value. */
-    int64_t recent_cpu;            /* Recently cpu usage. */
+    int64_t recent_cpu;        /* Recently cpu usage. */
     struct list_elem allelem;  /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */

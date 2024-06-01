@@ -151,21 +151,30 @@ void thread_tick(void) {
         if (t != idle_thread) 
             ready_size++;
         // load_avg = thread_get_load_avg_arith(load_avg, ready_size);
-        load_avg = DIVID_FIX_N_INT((MULTI_FIX_N_INT(load_avg, 59) 
-                            + CONVERT_2_FIX(ready_size)), 60);
+        // load_avg = DIVID_FIX_N_INT(ADD_FIX(MULTI_FIX_N_INT(load_avg, 59) 
+                            // , CONVERT_2_FIX(ready_size)), 60);
+        load_avg = ADD_FIX(DIVID_FIX_N_INT(MULTI_FIX_N_INT(load_avg, 59), 60), 
+                            DIVID_FIX_N_INT(CONVERT_2_FIX(ready_size), 60));
 
         ASSERT(intr_get_level() == INTR_OFF);
+        // enum intr_level old_level = intr_disable();
         thread_foreach(thread_update_recent_cpu, NULL);
+        // intr_set_level(old_level);
     }
 
     if (thread_mlfqs && ticks % TIME_SLICE == 0) {
         ASSERT(intr_get_level() == INTR_OFF);
-        thread_foreach(thread_update_priority, NULL);
+        // enum intr_level old_level = intr_disable();
+        // thread_foreach(thread_update_priority, NULL);
+        thread_update_priority(t, NULL);
+        // intr_set_level(old_level);
     }
 
 
-    ASSERT(intr_get_level() == INTR_OFF);
-    thread_foreach(timer_deduct, NULL);
+    // ASSERT(intr_get_level() == INTR_OFF);
+    // enum intr_level old_level = intr_disable();
+    // thread_foreach(timer_deduct, NULL);
+    // intr_set_level(old_level);
 }
 
 /* Prints thread statistics. */
@@ -225,8 +234,8 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
     /* Add to run queue. */
     thread_unblock(t);
 
-    if (priority > thread_current()->priority)
-        thread_yield();
+    
+    thread_try_yield();
     return tid;
 }
 
@@ -314,6 +323,15 @@ void thread_exit(void) {
     NOT_REACHED();
 }
 
+void thread_try_yield(void) {
+    enum intr_level old_level = intr_disable();
+    bool trigger = !list_empty(&ready_list) && list_entry(list_begin(&ready_list), 
+                    struct thread, elem)->priority > thread_current()->priority;
+    intr_set_level(old_level);
+
+    if(trigger) { thread_yield(); }
+}
+
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void thread_yield(void) {
@@ -324,17 +342,10 @@ void thread_yield(void) {
 
     old_level = intr_disable();
     if (cur != idle_thread) {
-        if (!list_empty(&ready_list)) {
-            int pri = list_entry(list_begin(&ready_list), struct thread, elem)
-                        ->priority;
-            if (pri >= cur->priority) {
-                // list_push_back(&ready_list, &cur->elem);
-                list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
-                cur->status = THREAD_READY;
-                schedule();
-            }
-        }
+        list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
     }
+    cur->status = THREAD_READY;
+    schedule();
     intr_set_level(old_level);
 }
 
@@ -356,8 +367,8 @@ void thread_update_priority(struct thread *t, void *aux) {
     if (t == idle_thread)
         return;
     // int priority = thread_cal_priority(t->recent_cpu, t->nice, PRI_MAX);
-    int priority = CONVERT_2_INT_ROUNDNEAR((CONVERT_2_FIX(PRI_MAX) 
-            - DIVID_FIX_N_INT(t->recent_cpu, 4) - CONVERT_2_FIX(2 * t->nice)));
+    int priority = CONVERT_2_INT_ROUNDNEAR(SUB_FIX(CONVERT_2_FIX(PRI_MAX) 
+            , ADD_FIX(DIVID_FIX_N_INT(t->recent_cpu, 4), CONVERT_2_FIX(2 * t->nice))));
     if (priority > PRI_MAX) 
         priority = PRI_MAX;
     else if (priority < PRI_MIN)
@@ -371,16 +382,17 @@ void thread_update_recent_cpu(struct thread *t, void *aux) {
         return;
     // t->recent_cpu = thread_get_recent_cpu_arith(load_avg, 
                     // t->recent_cpu, t->nice);
-    t->recent_cpu = MULTI_FIX(DIVID_FIX(MULTI_FIX_N_INT(load_avg, 2), 
-    (MULTI_FIX_N_INT(load_avg, 2) + F)), t->recent_cpu) + CONVERT_2_FIX(t->nice);
+    t->recent_cpu = ADD_FIX(MULTI_FIX(DIVID_FIX(MULTI_FIX_N_INT(load_avg, 2), 
+    (MULTI_FIX_N_INT(load_avg, 2) + F)), t->recent_cpu), CONVERT_2_FIX(t->nice));
+    thread_update_priority(t, NULL);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) { 
     enum intr_level old_level = intr_disable();
     thread_current()->priority = new_priority;
-    thread_yield();
     intr_set_level(old_level);
+    thread_try_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -391,7 +403,7 @@ void thread_set_nice(int new_nice UNUSED) {
     enum intr_level old_level = intr_disable();
     thread_current()->nice = new_nice;
     thread_update_priority(thread_current(), NULL);
-    thread_yield();
+    thread_try_yield();
     intr_set_level(old_level);
 }
 

@@ -85,7 +85,7 @@ struct thread {
     enum thread_status status; /* Thread state. */
     char name[16];             /* Name (for debugging purposes). */
     uint8_t *stack;            /* Saved stack pointer. */
-    int sleep;
+    int sleep;                 /* Sleep count */
     int priority;              /* Priority. */
     int nice;                  /* Nice value. */
     int64_t recent_cpu;        /* Recently cpu usage. */
@@ -93,6 +93,7 @@ struct thread {
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem; /* List element. */
+    struct list_elem sleepelem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -126,6 +127,7 @@ const char *thread_name(void);
 
 void thread_exit(void) NO_RETURN;
 void thread_yield(void);
+void thread_try_yield(void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func(struct thread *t, void *aux);

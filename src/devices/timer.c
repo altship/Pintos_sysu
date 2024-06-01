@@ -93,61 +93,59 @@ void sleep_init(void) { list_init(&sleep_list); }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
-// void timer_sleep(int64_t ticks) {
-//     if (ticks <= 0)return;
-//     int64_t start = timer_ticks();
-//     struct sleep_thread *sl;
-//     sl = (struct sleep_thread*)malloc(sizeof(struct sleep_thread));
-//     ASSERT(sl != NULL);
-//     sema_init(&sl->lk, 0);
-//     sl->approx_leave = start + ticks;
-
-//     /* Disabling interruption to enter critical section */
-//     enum intr_level old_level = intr_disable();
-//     ASSERT(old_level == INTR_ON);
-//     // list_push_front(&sleep_list, &sl->elem);
-//     list_insert_ordered(&sleep_list, &sl->elem, cmp, NULL);
-//     old_level = intr_enable();
-//     ASSERT(old_level == INTR_OFF);
-
-//     sema_down(&sl->lk);
-
-//     free(sl);
-//     // thread_yield();
-// }
-
 void timer_sleep(int64_t ticks) {
     if (ticks <= 0)return;
+
+    /* Disabling interruption to enter critical section */
     enum intr_level old_level = intr_disable();
-    thread_current()->sleep = ticks;
+    ASSERT(old_level == INTR_ON);
+    struct thread *curr = thread_current();
+    curr -> sleep = ticks;
+    // list_push_front(&sleep_list, &sl->elem);
+    list_push_back(&sleep_list, &curr->sleepelem);
     thread_block();
     intr_set_level(old_level);
 }
 
+// void timer_sleep(int64_t ticks) {
+//     if (ticks <= 0)return;
+//     enum intr_level old_level = intr_disable();
+//     ASSERT(old_level == INTR_ON);
+//     thread_current()->sleep = ticks;
+//     thread_block();
+//     intr_set_level(old_level);
+// }
+
 /* Every ticks search for threads that need to be waken, then awake it. 
    called from timer interruption, no lock is necessary.*/
-// void timer_wake(void) {
-//     if (list_empty(&sleep_list))return;
-//     struct sleep_thread *sl;
-//     struct list_elem *iter;
+void timer_wake(void) {
+    if (list_empty(&sleep_list))return;
+    struct list_elem *e = list_begin(&sleep_list);
+    struct list_elem *temp;
 
-//     while (!list_empty(&sleep_list)) {
-//         iter = list_begin(&sleep_list);
-//         sl = list_entry(iter, struct sleep_thread, elem);
-//         if (sl->approx_leave > timer_ticks())
-//             break;
-//         list_pop_front(&sleep_list);
-//         sema_up(&sl->lk);
-//     }
+    while (e != list_end(&sleep_list)) {
+        struct thread *t = list_entry(e, struct thread, sleepelem);
+        temp = e;
+        e = list_next(temp);
+        ASSERT(t->status == THREAD_BLOCKED);
 
-//     // for (; iter != list_end(&sleep_list); iter = list_next(iter)) {
-//     //     sl = list_entry(iter, struct sleep_thread, elem);
-//     //     if (sl->approx_leave <= timer_ticks()) {
-//     //         list_remove(iter);
-//     //         sema_up(&sl->lk);
-//     //     }
-//     // }
-// }
+        if (t->sleep == 1) {
+            thread_unblock(t);
+            list_remove(temp);
+        }
+        else if (t->sleep > 0) {
+            t->sleep--;
+        }
+    }
+
+    // for (; iter != list_end(&sleep_list); iter = list_next(iter)) {
+    //     sl = list_entry(iter, struct sleep_thread, elem);
+    //     if (sl->approx_leave <= timer_ticks()) {
+    //         list_remove(iter);
+    //         sema_up(&sl->lk);
+    //     }
+    // }
+}
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
@@ -196,7 +194,7 @@ static void timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
     thread_tick();
     // barrier();
-    // timer_wake();
+    timer_wake();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
